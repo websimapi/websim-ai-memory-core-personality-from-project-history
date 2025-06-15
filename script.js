@@ -98,78 +98,44 @@ class AIMemoryCore {
                 throw new Error('No projects found');
             }
 
-            const memories = [];
+            // Initialize memories array and start async processing
+            this.memories = [];
+            this.renderMemories();
+            this.updateMemoryCount();
             
-            // Process each project
-            for (const projectItem of projectsData.projects.data) {
-                const project = projectItem.project;
+            this.addSystemMessage('Starting to load your project history... This may take a moment.');
+            
+            // Process projects in chunks to avoid blocking the UI
+            const projects = projectsData.projects.data;
+            const chunkSize = 5; // Process 5 projects at a time
+            let processedCount = 0;
+            
+            for (let i = 0; i < projects.length; i += chunkSize) {
+                const chunk = projects.slice(i, i + chunkSize);
                 
-                try {
-                    // Get all revisions for this project
-                    const revisionsResponse = await fetch(`/api/v1/projects/${project.id}/revisions`);
-                    const revisionsData = await revisionsResponse.json();
-                    
-                    if (revisionsData.revisions && revisionsData.revisions.data) {
-                        // Process each revision to extract prompt history
-                        for (const revisionItem of revisionsData.revisions.data) {
-                            const revision = revisionItem.project_revision;
-                            
-                            // Get the site data to access the prompt
-                            if (revision.site_id) {
-                                try {
-                                    const siteResponse = await fetch(`/api/v1/sites/${revision.site_id}/html`);
-                                    // The site data is typically in the response headers or we need to get site info differently
-                                    
-                                    // Alternative: Get site info from projects endpoint which might include site data
-                                    const siteInfoResponse = await fetch(`/api/v1/projects/${project.id}/revisions/${revision.version}`);
-                                    const siteInfo = await siteInfoResponse.json();
-                                    
-                                    if (siteInfo.site && siteInfo.site.prompt) {
-                                        const prompt = siteInfo.site.prompt;
-                                        let promptText = '';
-                                        let emotion = 'neutral';
-                                        
-                                        // Extract prompt text based on prompt structure
-                                        if (typeof prompt === 'object' && prompt.text) {
-                                            promptText = prompt.text;
-                                            emotion = this.detectEmotion(promptText);
-                                        } else if (typeof prompt === 'string') {
-                                            promptText = prompt;
-                                            emotion = this.detectEmotion(promptText);
-                                        }
-                                        
-                                        if (promptText && promptText.trim()) {
-                                            memories.push({
-                                                id: project.id,
-                                                version: `v${revision.version}`,
-                                                prompt: promptText,
-                                                emotion: emotion,
-                                                timestamp: new Date(revision.created_at).getTime(),
-                                                title: project.title || 'Untitled Project'
-                                            });
-                                        }
-                                    }
-                                } catch (siteError) {
-                                    console.warn(`Failed to load site data for ${revision.site_id}:`, siteError);
-                                }
-                            }
-                        }
-                    }
-                } catch (revisionError) {
-                    console.warn(`Failed to load revisions for project ${project.id}:`, revisionError);
-                }
+                // Process chunk asynchronously
+                await this.processProjectChunk(chunk);
+                
+                processedCount += chunk.length;
+                
+                // Update UI with progress
+                this.loadMemoriesBtn.textContent = `Loading... (${processedCount}/${projects.length})`;
+                this.updateMemoryCount();
+                this.renderMemories();
+                
+                // Yield control back to the browser to keep UI responsive
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             
-            // Sort memories by timestamp (most recent first)
-            memories.sort((a, b) => b.timestamp - a.timestamp);
+            // Sort all memories by timestamp (most recent first)
+            this.memories.sort((a, b) => b.timestamp - a.timestamp);
             
-            this.memories = memories;
             this.renderMemories();
             this.updateMemoryCount();
             this.updateAIMood();
             
-            if (memories.length > 0) {
-                this.addSystemMessage(`Loaded ${memories.length} memories from your project history! I can now respond based on your creative journey.`);
+            if (this.memories.length > 0) {
+                this.addSystemMessage(`Loaded ${this.memories.length} memories from your project history! I can now respond based on your creative journey.`);
             } else {
                 this.addSystemMessage('No prompt history found in your projects. Create some projects with prompts to build my memory!');
             }
@@ -181,6 +147,69 @@ class AIMemoryCore {
             this.loadMemoriesBtn.textContent = this.currentUser ? `Load ${this.currentUser.username}'s Project History` : 'Load Project History';
             this.loadMemoriesBtn.disabled = false;
         }
+    }
+
+    async processProjectChunk(projects) {
+        const chunkMemories = [];
+        
+        // Process each project in the chunk
+        for (const projectItem of projects) {
+            const project = projectItem.project;
+            
+            try {
+                // Get all revisions for this project
+                const revisionsResponse = await fetch(`/api/v1/projects/${project.id}/revisions`);
+                const revisionsData = await revisionsResponse.json();
+                
+                if (revisionsData.revisions && revisionsData.revisions.data) {
+                    // Process each revision to extract prompt history
+                    for (const revisionItem of revisionsData.revisions.data) {
+                        const revision = revisionItem.project_revision;
+                        
+                        // Get the site data to access the prompt
+                        if (revision.site_id) {
+                            try {
+                                const siteInfoResponse = await fetch(`/api/v1/projects/${project.id}/revisions/${revision.version}`);
+                                const siteInfo = await siteInfoResponse.json();
+                                
+                                if (siteInfo.site && siteInfo.site.prompt) {
+                                    const prompt = siteInfo.site.prompt;
+                                    let promptText = '';
+                                    let emotion = 'neutral';
+                                    
+                                    // Extract prompt text based on prompt structure
+                                    if (typeof prompt === 'object' && prompt.text) {
+                                        promptText = prompt.text;
+                                        emotion = this.detectEmotion(promptText);
+                                    } else if (typeof prompt === 'string') {
+                                        promptText = prompt;
+                                        emotion = this.detectEmotion(promptText);
+                                    }
+                                    
+                                    if (promptText && promptText.trim()) {
+                                        chunkMemories.push({
+                                            id: project.id,
+                                            version: `v${revision.version}`,
+                                            prompt: promptText,
+                                            emotion: emotion,
+                                            timestamp: new Date(revision.created_at).getTime(),
+                                            title: project.title || 'Untitled Project'
+                                        });
+                                    }
+                                }
+                            } catch (siteError) {
+                                console.warn(`Failed to load site data for ${revision.site_id}:`, siteError);
+                            }
+                        }
+                    }
+                }
+            } catch (revisionError) {
+                console.warn(`Failed to load revisions for project ${project.id}:`, revisionError);
+            }
+        }
+        
+        // Add chunk memories to main memories array
+        this.memories.push(...chunkMemories);
     }
 
     detectEmotion(promptText) {
