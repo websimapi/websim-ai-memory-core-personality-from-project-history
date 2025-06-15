@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Memory Core - Personality from Project History</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Memory Panel -->
+        <div class="memory-panel" id="memoryPanel">
+            <div class="memory-header">
+                <h3>Active Memories</h3>
+                <div class="memory-count">0 memories</div>
+            </div>
+            <div class="memory-list" id="memoryList">
+                <!-- Memories will be populated here -->
+            </div>
+        </div>
+
+        <!-- Main Chat Interface -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="ai-status">
+                    <div class="status-indicator"></div>
+                    <div class="ai-info">
+                        <h2>AI Memory Core</h2>
+                        <p class="ai-mood" id="aiMood">Neutral - No memories loaded</p>
+                    </div>
+                </div>
+                <button class="load-memories-btn" id="loadMemoriesBtn">Load Project History</button>
+            </div>
+
+            <div class="chat-container" id="chatContainer">
+                <div class="welcome-message">
+                    <h3>Welcome to AI Memory Core</h3>
+                    <p>Load your project history to give me memories and personality. I'll respond based on the emotions and experiences from your past prompts.</p>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Share your thoughts... I'll respond based on my memories from your project history"
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22,2 15,22 11,13 2,9"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Detail Modal -->
+        <div class="memory-modal" id="memoryModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Memory Detail</h3>
+                    <button class="close-btn" id="closeModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="memory-meta">
+                        <span class="project-id" id="modalProjectId"></span>
+                        <span class="version" id="modalVersion"></span>
+                    </div>
+                    <div class="memory-prompt" id="modalPrompt"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
