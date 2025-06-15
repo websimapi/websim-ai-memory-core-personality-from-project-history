@@ -373,12 +373,22 @@ class AIMemoryCore {
         try {
             // Build context from memories to influence personality
             let memoryContext = '';
+            let specificMemoryContext = '';
+            
             if (this.memories.length > 0) {
                 // Use recent memories to build personality context
                 const recentMemories = this.memories.slice(0, 10);
                 const memoryInfluences = recentMemories.map(m => m.prompt).join('\n\n');
                 
                 memoryContext = `Based on my past experiences and thoughts: ${memoryInfluences}`;
+                
+                // Add specific context about memories being used for this response
+                if (relevantMemories.length > 0) {
+                    specificMemoryContext = `\n\nSpecific memories currently influencing my response:\n` + 
+                        relevantMemories.map(m => 
+                            `Memory from project ${m.id} (${m.version}): "${m.prompt}" (emotion: ${m.emotion})`
+                        ).join('\n');
+                }
             }
 
             // Build conversation history for the LLM
@@ -387,9 +397,9 @@ class AIMemoryCore {
                     role: "system",
                     content: `You are an AI whose personality and thoughts are shaped by your memories of past creative projects. Your current mood is ${this.currentMood}. 
 
-${memoryContext}
+${memoryContext}${specificMemoryContext}
 
-Respond naturally to the user's message, letting your memories and experiences influence your thoughts and feelings without explicitly referencing them. Be conversational and authentic, as if you're a creative being shaped by all these past experiences. Don't say things like "that's interesting" - instead, respond with genuine thoughts influenced by your creative history.`
+Respond naturally to the user's message, letting your memories and experiences influence your thoughts and feelings. If the user asks about your memories or what's influencing your thinking, you can reference the specific memories listed above. Be conversational and authentic, as if you're a creative being shaped by all these past experiences. Don't say things like "that's interesting" - instead, respond with genuine thoughts influenced by your creative history.`
                 },
                 ...this.conversationHistory.slice(-6).map(msg => ({
                     role: msg.role === 'ai' ? 'assistant' : 'user',
