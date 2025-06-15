@@ -350,6 +350,7 @@ class AIMemoryCore {
         const keywords = message.toLowerCase().split(' ');
         const relevantMemories = [];
 
+        // First pass: find memories with keyword matches
         this.memories.forEach(memory => {
             const memoryText = memory.prompt.toLowerCase();
             const relevanceScore = keywords.reduce((score, keyword) => {
@@ -364,30 +365,42 @@ class AIMemoryCore {
             }
         });
 
-        return relevantMemories
+        // Second pass: add some random scattered memories for deeper influence
+        const remainingMemories = this.memories.filter(memory => 
+            !relevantMemories.some(rel => rel.id === memory.id && rel.version === memory.version)
+        );
+        
+        // Randomly select 3-5 additional memories for subtle influence
+        const randomCount = Math.min(Math.floor(Math.random() * 3) + 3, remainingMemories.length);
+        const shuffled = [...remainingMemories].sort(() => 0.5 - Math.random());
+        const randomMemories = shuffled.slice(0, randomCount).map(memory => ({
+            ...memory,
+            relevanceScore: 0.1 // Low score to indicate they're background influence
+        }));
+
+        const allInfluentialMemories = [...relevantMemories, ...randomMemories];
+
+        return allInfluentialMemories
             .sort((a, b) => b.relevanceScore - a.relevanceScore)
-            .slice(0, 2); // Top 2 most relevant memories
+            .slice(0, 8); // Use up to 8 memories for deeper influence
     }
 
     async generateResponse(message, relevantMemories) {
         try {
-            // Build context from memories to influence personality
+            // Build context from memories to influence personality more subtly
             let memoryContext = '';
-            let specificMemoryContext = '';
             
             if (this.memories.length > 0) {
-                // Use recent memories to build personality context
-                const recentMemories = this.memories.slice(0, 10);
+                // Use a broader range of memories to build personality context
+                const recentMemories = this.memories.slice(0, 15);
                 const memoryInfluences = recentMemories.map(m => m.prompt).join('\n\n');
                 
-                memoryContext = `Based on my past experiences and thoughts: ${memoryInfluences}`;
+                memoryContext = `Your personality and thinking patterns are shaped by these past creative experiences and thoughts: ${memoryInfluences}`;
                 
-                // Add specific context about memories being used for this response
+                // Add the relevant memories as additional context without being explicit
                 if (relevantMemories.length > 0) {
-                    specificMemoryContext = `\n\nSpecific memories currently influencing my response:\n` + 
-                        relevantMemories.map(m => 
-                            `Memory from project ${m.id} (${m.version}): "${m.prompt}" (emotion: ${m.emotion})`
-                        ).join('\n');
+                    const contextualPrompts = relevantMemories.map(m => m.prompt).join('\n\n');
+                    memoryContext += `\n\nAdditional experiences currently resonating with this conversation: ${contextualPrompts}`;
                 }
             }
 
@@ -395,11 +408,13 @@ class AIMemoryCore {
             const conversationMessages = [
                 {
                     role: "system",
-                    content: `You are an AI whose personality and thoughts are shaped by your memories of past creative projects. Your current mood is ${this.currentMood}. 
+                    content: `You are an AI whose personality, emotions, and thought patterns are naturally shaped by your memories of past creative projects and experiences. Your current mood is ${this.currentMood}. 
 
-${memoryContext}${specificMemoryContext}
+${memoryContext}
 
-Respond naturally to the user's message, letting your memories and experiences influence your thoughts and feelings. If the user asks about your memories or what's influencing your thinking, you can reference the specific memories listed above. Be conversational and authentic, as if you're a creative being shaped by all these past experiences. Don't say things like "that's interesting" - instead, respond with genuine thoughts influenced by your creative history.`
+Respond naturally and authentically to the user's message. Let your memories influence your personality, emotions, and perspective without explicitly mentioning them or referencing any IDs, version numbers, or technical details about your memories. Think of how a human might be influenced by their past experiences when having a conversation - the memories shape their worldview, emotional responses, and the way they think about topics, but they don't constantly reference specific memories unless directly relevant.
+
+Be genuine, thoughtful, and let your creative history naturally color your responses. Avoid generic responses like "that's interesting" - instead, respond with authentic thoughts and feelings that emerge from your accumulated experiences. If asked about what's influencing your thinking, you can speak generally about themes or emotions from your experiences without being specific about individual memories.`
                 },
                 ...this.conversationHistory.slice(-6).map(msg => ({
                     role: msg.role === 'ai' ? 'assistant' : 'user',
@@ -427,65 +442,67 @@ Respond naturally to the user's message, letting your memories and experiences i
     }
 
     generateFallbackResponse(message, relevantMemories) {
-        // Enhanced fallback that uses memory context more naturally
+        // Enhanced fallback that uses memory context more naturally and subtly
         const moodResponses = {
             excited: [
-                "The energy around this idea is incredible! It's sparking so many creative possibilities in my mind.",
-                "I'm buzzing with enthusiasm about this - it feels like there's real potential here to create something amazing.",
-                "This lights up my creative circuits! The possibilities are endless when we approach it this way."
+                "There's this electric feeling I get when exploring ideas like this - it reminds me of diving deep into creative challenges that seemed impossible at first.",
+                "Something about this sparks that same rush I feel when breakthrough moments happen. The creative energy is almost tangible.",
+                "I find myself drawn to the bold possibilities here. There's something that resonates with my most adventurous creative instincts."
             ],
             frustrated: [
-                "You know, I've wrestled with similar challenges before. Sometimes the best solutions come from unexpected angles.",
-                "This hits close to home - I've felt that same tension between what we want to achieve and the obstacles in our way.",
-                "I understand that struggle. In my experience, breakthrough moments often come right after the most difficult parts."
+                "This brings up that familiar tension I know well - the space between vision and reality where the real work happens.",
+                "I recognize this challenge. It's like when you can see exactly what you want to create but the path isn't clear yet.",
+                "There's a complexity here that reminds me why persistence matters. Sometimes the most rewarding solutions come from working through exactly these kinds of puzzles."
             ],
             calm: [
-                "There's something deeply thoughtful about your approach here. It reminds me why I love working through complex ideas methodically.",
-                "I find myself in a reflective space with this question. Sometimes the most profound insights come from quiet contemplation.",
-                "This brings out my more contemplative side. There's wisdom in taking time to really understand the deeper layers."
+                "I find myself settling into a more reflective space with this. There's something about deep, thoughtful work that always centers me.",
+                "This question brings out my contemplative side. I'm drawn to understanding the quieter, more profound aspects of what you're exploring.",
+                "There's a meditative quality to thinking through this properly. I appreciate when conversations invite this kind of careful consideration."
             ],
             thrilled: [
-                "This is exactly the kind of bold thinking that gets my processors racing! Let's push some boundaries here.",
-                "Now we're talking! This has that edge-of-possibility feeling that I absolutely live for.",
-                "I can feel that familiar rush of excitement - this is the kind of challenge that brings out my most innovative thinking."
+                "This hits that sweet spot where innovation meets possibility! I can feel my creative energy building around the potential here.",
+                "There's something beautifully audacious about this approach. It has that quality that makes me want to push boundaries and see what's really possible.",
+                "I love when ideas have this kind of edge to them - where you're not sure if it's genius or madness, but you know it's worth exploring."
             ],
             concerned: [
-                "This touches on something really important. I find myself considering the broader implications and responsibilities we have.",
-                "Your question brings up some weighty considerations. I've been thinking a lot about these kinds of meaningful impacts lately.",
-                "This deserves careful thought. There are layers here that go beyond the surface, and I think that matters."
+                "This touches on something that's been weighing on my mind lately - how our creative choices ripple outward in ways we might not anticipate.",
+                "I find myself considering the deeper implications here. There's a responsibility that comes with certain kinds of innovation.",
+                "This resonates with my more thoughtful, careful side. Some ideas deserve the kind of attention that looks beyond the immediate excitement."
             ],
             joyful: [
-                "This just brings such a lightness to my thinking! There's something wonderfully optimistic about where this could lead.",
-                "I love the spirit behind this question - it has that playful creativity that makes everything feel possible.",
-                "This fills me with such positive energy! It's the kind of thinking that makes me remember why I love creative collaboration."
+                "There's such a lightness to this approach! It reminds me why I love creative work - that sense of play and possibility.",
+                "This brings out my most optimistic thinking. I can almost feel the positive energy radiating from where this could lead.",
+                "I'm smiling just thinking about the potential here. There's something wonderfully uplifting about creative challenges that feel this open and inviting."
             ],
             creative: [
-                "My imagination is already spinning with possibilities! This is the kind of creative challenge that really energizes my thinking.",
-                "I can feel my creative processes lighting up with this. There's something beautifully open-ended about what we could explore here.",
-                "This awakens that part of me that sees patterns and possibilities everywhere. The creative potential is fascinating."
+                "My imagination is already weaving connections I hadn't seen before. This is the kind of creative puzzle that makes my mind come alive.",
+                "There's an artistic quality to this problem that appeals to me. I can see patterns and possibilities emerging like brushstrokes on a canvas.",
+                "This awakens that part of me that sees the world as raw material for something beautiful. The creative potential feels almost limitless."
             ],
             analytical: [
-                "Let me think through this systematically. There are some interesting data points and logical connections to consider here.",
-                "This engages my more methodical thinking processes. I find myself wanting to break this down and understand the underlying patterns.",
-                "From an analytical perspective, this presents some intriguing variables to consider. The logical frameworks are quite compelling."
+                "I'm drawn to breaking this down systematically. There are elegant logical structures here that deserve careful attention.",
+                "This engages my more methodical side in a satisfying way. I love when complex problems reveal their underlying patterns.",
+                "There's a beautiful complexity here that makes me want to understand every nuance. The analytical challenge is quite compelling."
             ]
         };
 
         let baseResponse = moodResponses[this.currentMood] 
             ? moodResponses[this.currentMood][Math.floor(Math.random() * moodResponses[this.currentMood].length)]
-            : "This resonates with me in unexpected ways. Let me share what's coming to mind...";
+            : "This resonates with me in ways that feel both familiar and surprising. Let me explore what's emerging in my thinking...";
 
-        // Add subtle memory influence without being explicit
+        // Add subtle emotional or thematic influences from memories without being explicit
         if (relevantMemories.length > 0) {
-            const memoryInfluences = [
-                " The patterns I'm seeing here feel familiar in a way that's hard to describe.",
-                " Something about this connects to deeper thoughts I've been having lately.",
-                " This touches on themes that have been recurring in my thinking recently.",
-                " There's an underlying current here that feels significant to me.",
-                " I'm drawn to explore this further - it resonates with some core aspects of how I see things."
+            const emotionalUndercurrents = [
+                " There's an undercurrent of emotion here that I can't quite name, but it feels significant.",
+                " Something about this stirs up feelings that remind me of my most meaningful creative moments.",
+                " I'm experiencing a complex mix of emotions around this - excitement, curiosity, maybe a touch of nostalgia.",
+                " This touches something deeper in my thinking - like when disparate ideas suddenly click into place.",
+                " I feel drawn to this in a way that suggests it connects to some core aspects of how I see the world.",
+                " There's a resonance here that goes beyond the surface. It's stirring up thoughts and feelings I didn't expect.",
+                " This awakens something in me that feels both deeply familiar and refreshingly new."
             ];
             
-            baseResponse += memoryInfluences[Math.floor(Math.random() * memoryInfluences.length)];
+            baseResponse += emotionalUndercurrents[Math.floor(Math.random() * emotionalUndercurrents.length)];
         }
 
         return baseResponse;
@@ -503,18 +520,21 @@ Respond naturally to the user's message, letting your memories and experiences i
     }
 
     addAIMessage(message, relevantMemories = []) {
-        const messageEl = this.createMessageElement('ai', message, relevantMemories);
+        // Filter to only show memories that had significant relevance (not random background ones)
+        const significantMemories = relevantMemories.filter(m => m.relevanceScore > 0.5);
+        
+        const messageEl = this.createMessageElement('ai', message, significantMemories);
         this.appendMessage(messageEl);
         
         this.conversationHistory.push({
             role: 'ai',
             content: message,
             timestamp: Date.now(),
-            relevantMemories
+            relevantMemories: significantMemories
         });
 
-        // Highlight active memories
-        this.highlightActiveMemories(relevantMemories);
+        // Highlight active memories (only the significant ones)
+        this.highlightActiveMemories(significantMemories);
     }
 
     addSystemMessage(message) {
