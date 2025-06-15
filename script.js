@@ -5,6 +5,7 @@ class AIMemoryCore {
         this.activeMemories = new Set();
         this.currentMood = 'neutral';
         this.currentUser = null;
+        this.storageKey = 'aiMemoryCore_memories';
         
         this.initializeElements();
         this.bindEvents();
@@ -47,6 +48,53 @@ class AIMemoryCore {
                 this.closeMemoryModal();
             }
         });
+
+        // Add clear cache button functionality
+        this.addClearCacheButton();
+    }
+
+    addClearCacheButton() {
+        // Create clear cache button
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = 'Clear Cache';
+        clearBtn.className = 'clear-cache-btn';
+        clearBtn.style.cssText = `
+            background: linear-gradient(45deg, #f44336, #e57373);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: all 0.3s ease;
+        `;
+        
+        clearBtn.addEventListener('mouseover', () => {
+            clearBtn.style.transform = 'translateY(-1px)';
+            clearBtn.style.boxShadow = '0 4px 15px rgba(244, 67, 54, 0.3)';
+        });
+        
+        clearBtn.addEventListener('mouseout', () => {
+            clearBtn.style.transform = 'translateY(0)';
+            clearBtn.style.boxShadow = 'none';
+        });
+        
+        clearBtn.addEventListener('click', () => this.clearMemoryCache());
+        
+        // Add to header next to load button
+        const chatHeader = document.querySelector('.chat-header');
+        const buttonContainer = chatHeader.querySelector('button').parentNode;
+        buttonContainer.appendChild(clearBtn);
+    }
+
+    clearMemoryCache() {
+        localStorage.removeItem(this.storageKey);
+        this.memories = [];
+        this.renderMemories();
+        this.updateMemoryCount();
+        this.updateAIMood();
+        this.addSystemMessage('Memory cache cleared. Click "Load Project History" to reload memories.');
     }
 
     autoResize() {
@@ -59,10 +107,51 @@ class AIMemoryCore {
             this.currentUser = await window.websim.getUser();
             if (this.currentUser) {
                 this.updateUIForUser();
+                this.loadMemoriesFromCache();
             }
         } catch (error) {
             console.error('Failed to get current user:', error);
             this.addSystemMessage('Unable to load user data. Please make sure you are logged in.');
+        }
+    }
+
+    loadMemoriesFromCache() {
+        try {
+            const cachedData = localStorage.getItem(this.storageKey);
+            if (cachedData) {
+                const parsedData = JSON.parse(cachedData);
+                
+                // Check if cached data is for current user
+                if (parsedData.userId === this.currentUser.id) {
+                    this.memories = parsedData.memories || [];
+                    this.renderMemories();
+                    this.updateMemoryCount();
+                    this.updateAIMood();
+                    
+                    if (this.memories.length > 0) {
+                        this.addSystemMessage(`Loaded ${this.memories.length} memories from cache. Click "Clear Cache" to reload from server.`);
+                    }
+                    return true;
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to load memories from cache:', error);
+        }
+        return false;
+    }
+
+    saveMemoriesToCache() {
+        if (!this.currentUser || this.memories.length === 0) return;
+        
+        try {
+            const dataToCache = {
+                userId: this.currentUser.id,
+                memories: this.memories,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(this.storageKey, JSON.stringify(dataToCache));
+        } catch (error) {
+            console.warn('Failed to save memories to cache:', error);
         }
     }
 
@@ -83,6 +172,11 @@ class AIMemoryCore {
     async loadProjectHistory() {
         if (!this.currentUser) {
             this.addSystemMessage('Please log in to load your project history.');
+            return;
+        }
+
+        // Check if we already have cached memories
+        if (this.loadMemoriesFromCache()) {
             return;
         }
 
@@ -135,6 +229,7 @@ class AIMemoryCore {
             this.updateAIMood();
             
             if (this.memories.length > 0) {
+                this.saveMemoriesToCache();
                 this.addSystemMessage(`Loaded ${this.memories.length} memories from your project history! I can now respond based on your creative journey.`);
             } else {
                 this.addSystemMessage('No prompt history found in your projects. Create some projects with prompts to build my memory!');
