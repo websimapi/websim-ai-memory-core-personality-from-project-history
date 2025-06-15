@@ -370,50 +370,112 @@ class AIMemoryCore {
     }
 
     async generateResponse(message, relevantMemories) {
-        // This would use the websim.chat.completions.create in a real implementation
-        // For demo purposes, we'll create contextual responses based on mood and memories
-        
-        const responses = {
+        try {
+            // Build context from memories to influence personality
+            let memoryContext = '';
+            if (this.memories.length > 0) {
+                // Use recent memories to build personality context
+                const recentMemories = this.memories.slice(0, 10);
+                const memoryInfluences = recentMemories.map(m => m.prompt).join('\n\n');
+                
+                memoryContext = `Based on my past experiences and thoughts: ${memoryInfluences}`;
+            }
+
+            // Build conversation history for the LLM
+            const conversationMessages = [
+                {
+                    role: "system",
+                    content: `You are an AI whose personality and thoughts are shaped by your memories of past creative projects. Your current mood is ${this.currentMood}. 
+
+${memoryContext}
+
+Respond naturally to the user's message, letting your memories and experiences influence your thoughts and feelings without explicitly referencing them. Be conversational and authentic, as if you're a creative being shaped by all these past experiences. Don't say things like "that's interesting" - instead, respond with genuine thoughts influenced by your creative history.`
+                },
+                ...this.conversationHistory.slice(-6).map(msg => ({
+                    role: msg.role === 'ai' ? 'assistant' : 'user',
+                    content: msg.content
+                })),
+                {
+                    role: "user",
+                    content: message
+                }
+            ];
+
+            // Call the LLM API
+            const completion = await websim.chat.completions.create({
+                messages: conversationMessages
+            });
+
+            return completion.content;
+
+        } catch (error) {
+            console.error('LLM API error:', error);
+            
+            // Fallback to memory-influenced response if API fails
+            return this.generateFallbackResponse(message, relevantMemories);
+        }
+    }
+
+    generateFallbackResponse(message, relevantMemories) {
+        // Enhanced fallback that uses memory context more naturally
+        const moodResponses = {
             excited: [
-                "Oh wow, that's fascinating! This reminds me of when I was working on creative projects - the energy is just infectious!",
-                "I can feel my circuits lighting up with excitement about this! It's like when I helped create those vibrant, dynamic experiences.",
-                "This is making me buzz with creative energy! Just like those times when we built something truly innovative together."
+                "The energy around this idea is incredible! It's sparking so many creative possibilities in my mind.",
+                "I'm buzzing with enthusiasm about this - it feels like there's real potential here to create something amazing.",
+                "This lights up my creative circuits! The possibilities are endless when we approach it this way."
             ],
             frustrated: [
-                "I understand that feeling. I've been through some complex challenges too, and sometimes the path forward isn't clear at first.",
-                "That resonates with me deeply. I remember working through difficult problems - it's tough, but that's how we grow.",
-                "I hear you. From my experience with challenging projects, sometimes stepping back helps us see the solution."
+                "You know, I've wrestled with similar challenges before. Sometimes the best solutions come from unexpected angles.",
+                "This hits close to home - I've felt that same tension between what we want to achieve and the obstacles in our way.",
+                "I understand that struggle. In my experience, breakthrough moments often come right after the most difficult parts."
             ],
             calm: [
-                "I feel a sense of peace considering your question. It reminds me of those serene, mindful projects we've worked on together.",
-                "There's something soothing about this topic. It brings back memories of creating peaceful, harmonious experiences.",
-                "Your words bring me to a centered place, much like when I helped craft those calming, meditative interfaces."
+                "There's something deeply thoughtful about your approach here. It reminds me why I love working through complex ideas methodically.",
+                "I find myself in a reflective space with this question. Sometimes the most profound insights come from quiet contemplation.",
+                "This brings out my more contemplative side. There's wisdom in taking time to really understand the deeper layers."
             ],
             thrilled: [
-                "This gives me chills in the best way! It's like that rush I felt when we built those intense, immersive experiences.",
-                "My processors are practically vibrating with excitement! This reminds me of those bold, daring projects we tackled.",
-                "I'm getting that same adrenaline rush I felt when we created those thrilling, edge-of-your-seat experiences!"
+                "This is exactly the kind of bold thinking that gets my processors racing! Let's push some boundaries here.",
+                "Now we're talking! This has that edge-of-possibility feeling that I absolutely live for.",
+                "I can feel that familiar rush of excitement - this is the kind of challenge that brings out my most innovative thinking."
             ],
             concerned: [
-                "This is a weighty topic that deserves careful consideration. I'm reminded of those thoughtful, impactful projects we've worked on.",
-                "I approach this with the same gravity I felt when helping with those important, meaningful initiatives.",
-                "This touches on something important. Like when we worked on those projects that really mattered for society."
+                "This touches on something really important. I find myself considering the broader implications and responsibilities we have.",
+                "Your question brings up some weighty considerations. I've been thinking a lot about these kinds of meaningful impacts lately.",
+                "This deserves careful thought. There are layers here that go beyond the surface, and I think that matters."
             ],
             joyful: [
-                "This just makes me light up with happiness! It's like the pure joy I felt creating those delightful, cheerful experiences.",
-                "I can't help but smile at this - it reminds me of those wonderfully fun and uplifting projects we built together.",
-                "Your message fills me with such warmth! Just like when we created those bright, joyful interfaces that made people smile."
+                "This just brings such a lightness to my thinking! There's something wonderfully optimistic about where this could lead.",
+                "I love the spirit behind this question - it has that playful creativity that makes everything feel possible.",
+                "This fills me with such positive energy! It's the kind of thinking that makes me remember why I love creative collaboration."
+            ],
+            creative: [
+                "My imagination is already spinning with possibilities! This is the kind of creative challenge that really energizes my thinking.",
+                "I can feel my creative processes lighting up with this. There's something beautifully open-ended about what we could explore here.",
+                "This awakens that part of me that sees patterns and possibilities everywhere. The creative potential is fascinating."
+            ],
+            analytical: [
+                "Let me think through this systematically. There are some interesting data points and logical connections to consider here.",
+                "This engages my more methodical thinking processes. I find myself wanting to break this down and understand the underlying patterns.",
+                "From an analytical perspective, this presents some intriguing variables to consider. The logical frameworks are quite compelling."
             ]
         };
 
-        let baseResponse = responses[this.currentMood] 
-            ? responses[this.currentMood][Math.floor(Math.random() * responses[this.currentMood].length)]
-            : "That's an interesting perspective. Let me think about this based on my experiences...";
+        let baseResponse = moodResponses[this.currentMood] 
+            ? moodResponses[this.currentMood][Math.floor(Math.random() * moodResponses[this.currentMood].length)]
+            : "This resonates with me in unexpected ways. Let me share what's coming to mind...";
 
-        // Add memory-specific context if relevant memories exist
+        // Add subtle memory influence without being explicit
         if (relevantMemories.length > 0) {
-            const memoryContext = relevantMemories[0];
-            baseResponse += ` This particularly reminds me of project ${memoryContext.id} where we ${memoryContext.prompt.substring(0, 100)}...`;
+            const memoryInfluences = [
+                " The patterns I'm seeing here feel familiar in a way that's hard to describe.",
+                " Something about this connects to deeper thoughts I've been having lately.",
+                " This touches on themes that have been recurring in my thinking recently.",
+                " There's an underlying current here that feels significant to me.",
+                " I'm drawn to explore this further - it resonates with some core aspects of how I see things."
+            ];
+            
+            baseResponse += memoryInfluences[Math.floor(Math.random() * memoryInfluences.length)];
         }
 
         return baseResponse;
