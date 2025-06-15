@@ -4,10 +4,11 @@ class AIMemoryCore {
         this.conversationHistory = [];
         this.activeMemories = new Set();
         this.currentMood = 'neutral';
+        this.currentUser = null;
         
         this.initializeElements();
         this.bindEvents();
-        this.loadSampleMemories(); // For demo purposes
+        this.initializeUser();
     }
 
     initializeElements() {
@@ -53,81 +54,165 @@ class AIMemoryCore {
         this.messageInput.style.height = this.messageInput.scrollHeight + 'px';
     }
 
-    loadSampleMemories() {
-        // Sample memories for demonstration
-        const sampleMemories = [
-            {
-                id: 'proj_abc123',
-                version: 'v1.2',
-                prompt: 'Create a beautiful landing page for a futuristic AI startup with neon colors and cyberpunk aesthetics. Make it feel alive with animations.',
-                emotion: 'excited',
-                timestamp: Date.now() - 86400000
-            },
-            {
-                id: 'proj_def456',
-                version: 'v2.1',
-                prompt: 'I need help debugging this complex React component. The state management is getting messy and I\'m feeling overwhelmed.',
-                emotion: 'frustrated',
-                timestamp: Date.now() - 172800000
-            },
-            {
-                id: 'proj_ghi789',
-                version: 'v1.0',
-                prompt: 'Build a meditation app with calming sounds and peaceful animations. Something that helps people find inner peace.',
-                emotion: 'calm',
-                timestamp: Date.now() - 259200000
-            },
-            {
-                id: 'proj_jkl012',
-                version: 'v3.4',
-                prompt: 'Can you create a horror game with jump scares? Make it really terrifying with dark atmospheres and unsettling sounds.',
-                emotion: 'thrilled',
-                timestamp: Date.now() - 345600000
+    async initializeUser() {
+        try {
+            this.currentUser = await window.websim.getUser();
+            if (this.currentUser) {
+                this.updateUIForUser();
             }
-        ];
+        } catch (error) {
+            console.error('Failed to get current user:', error);
+            this.addSystemMessage('Unable to load user data. Please make sure you are logged in.');
+        }
+    }
 
-        this.memories = sampleMemories;
+    updateUIForUser() {
+        if (this.currentUser) {
+            this.loadMemoriesBtn.textContent = `Load ${this.currentUser.username}'s Project History`;
+        }
+    }
+
+    loadSampleMemories() {
+        // Remove sample memories - we'll load real data instead
+        this.memories = [];
         this.renderMemories();
         this.updateMemoryCount();
         this.updateAIMood();
     }
 
     async loadProjectHistory() {
-        // In a real implementation, this would fetch from the WebSim API
-        // For now, we'll simulate loading more memories
-        
-        const newMemories = [
-            {
-                id: 'proj_new001',
-                version: 'v1.0',
-                prompt: 'Create an interactive data visualization showing climate change trends over the past century. Make it educational but not depressing.',
-                emotion: 'concerned',
-                timestamp: Date.now()
-            },
-            {
-                id: 'proj_new002',
-                version: 'v2.0',
-                prompt: 'Build a fun puzzle game with bright colors and cheerful music. Something that makes people smile and feel good.',
-                emotion: 'joyful',
-                timestamp: Date.now() - 3600000
-            }
-        ];
+        if (!this.currentUser) {
+            this.addSystemMessage('Please log in to load your project history.');
+            return;
+        }
 
-        // Simulate loading delay
         this.loadMemoriesBtn.textContent = 'Loading...';
         this.loadMemoriesBtn.disabled = true;
 
-        setTimeout(() => {
-            this.memories = [...newMemories, ...this.memories];
+        try {
+            // Get user's projects (up to 100 most recent)
+            const response = await fetch(`/api/v1/users/${this.currentUser.username}/projects?first=100&sort_by=updated_at`);
+            const projectsData = await response.json();
+            
+            if (!projectsData.projects || !projectsData.projects.data) {
+                throw new Error('No projects found');
+            }
+
+            const memories = [];
+            
+            // Process each project
+            for (const projectItem of projectsData.projects.data) {
+                const project = projectItem.project;
+                
+                try {
+                    // Get all revisions for this project
+                    const revisionsResponse = await fetch(`/api/v1/projects/${project.id}/revisions`);
+                    const revisionsData = await revisionsResponse.json();
+                    
+                    if (revisionsData.revisions && revisionsData.revisions.data) {
+                        // Process each revision to extract prompt history
+                        for (const revisionItem of revisionsData.revisions.data) {
+                            const revision = revisionItem.project_revision;
+                            
+                            // Get the site data to access the prompt
+                            if (revision.site_id) {
+                                try {
+                                    const siteResponse = await fetch(`/api/v1/sites/${revision.site_id}/html`);
+                                    // The site data is typically in the response headers or we need to get site info differently
+                                    
+                                    // Alternative: Get site info from projects endpoint which might include site data
+                                    const siteInfoResponse = await fetch(`/api/v1/projects/${project.id}/revisions/${revision.version}`);
+                                    const siteInfo = await siteInfoResponse.json();
+                                    
+                                    if (siteInfo.site && siteInfo.site.prompt) {
+                                        const prompt = siteInfo.site.prompt;
+                                        let promptText = '';
+                                        let emotion = 'neutral';
+                                        
+                                        // Extract prompt text based on prompt structure
+                                        if (typeof prompt === 'object' && prompt.text) {
+                                            promptText = prompt.text;
+                                            emotion = this.detectEmotion(promptText);
+                                        } else if (typeof prompt === 'string') {
+                                            promptText = prompt;
+                                            emotion = this.detectEmotion(promptText);
+                                        }
+                                        
+                                        if (promptText && promptText.trim()) {
+                                            memories.push({
+                                                id: project.id,
+                                                version: `v${revision.version}`,
+                                                prompt: promptText,
+                                                emotion: emotion,
+                                                timestamp: new Date(revision.created_at).getTime(),
+                                                title: project.title || 'Untitled Project'
+                                            });
+                                        }
+                                    }
+                                } catch (siteError) {
+                                    console.warn(`Failed to load site data for ${revision.site_id}:`, siteError);
+                                }
+                            }
+                        }
+                    }
+                } catch (revisionError) {
+                    console.warn(`Failed to load revisions for project ${project.id}:`, revisionError);
+                }
+            }
+            
+            // Sort memories by timestamp (most recent first)
+            memories.sort((a, b) => b.timestamp - a.timestamp);
+            
+            this.memories = memories;
             this.renderMemories();
             this.updateMemoryCount();
             this.updateAIMood();
             
-            this.loadMemoriesBtn.textContent = 'Load Project History';
-            this.loadMemoriesBtn.disabled = false;
+            if (memories.length > 0) {
+                this.addSystemMessage(`Loaded ${memories.length} memories from your project history! I can now respond based on your creative journey.`);
+            } else {
+                this.addSystemMessage('No prompt history found in your projects. Create some projects with prompts to build my memory!');
+            }
             
-            this.addSystemMessage('New memories loaded! I can feel my personality expanding with your project history.');
-        }, 2000);
+        } catch (error) {
+            console.error('Failed to load project history:', error);
+            this.addSystemMessage('Failed to load project history. Please try again later.');
+        } finally {
+            this.loadMemoriesBtn.textContent = this.currentUser ? `Load ${this.currentUser.username}'s Project History` : 'Load Project History';
+            this.loadMemoriesBtn.disabled = false;
+        }
+    }
+
+    detectEmotion(promptText) {
+        const text = promptText.toLowerCase();
+        
+        // Emotional keywords mapping
+        const emotionKeywords = {
+            excited: ['amazing', 'awesome', 'incredible', 'fantastic', 'brilliant', 'stunning', 'spectacular', 'vibrant', 'dynamic', 'energetic'],
+            frustrated: ['fix', 'bug', 'broken', 'error', 'problem', 'issue', 'help', 'debug', 'difficult', 'struggling'],
+            calm: ['peaceful', 'serene', 'meditation', 'calm', 'relaxing', 'tranquil', 'soothing', 'gentle', 'mindful', 'zen'],
+            thrilled: ['exciting', 'adventure', 'thrill', 'intense', 'bold', 'daring', 'extreme', 'wild', 'epic', 'adrenaline'],
+            concerned: ['important', 'serious', 'critical', 'urgent', 'climate', 'environment', 'social', 'impact', 'awareness', 'responsibility'],
+            joyful: ['fun', 'happy', 'cheerful', 'delightful', 'playful', 'bright', 'colorful', 'smile', 'joy', 'celebration'],
+            creative: ['artistic', 'creative', 'innovative', 'unique', 'original', 'imaginative', 'inspiring', 'beautiful', 'design', 'aesthetic'],
+            analytical: ['data', 'analysis', 'chart', 'graph', 'statistics', 'research', 'study', 'scientific', 'logical', 'systematic']
+        };
+        
+        let maxScore = 0;
+        let dominantEmotion = 'neutral';
+        
+        for (const [emotion, keywords] of Object.entries(emotionKeywords)) {
+            const score = keywords.reduce((acc, keyword) => {
+                return acc + (text.includes(keyword) ? 1 : 0);
+            }, 0);
+            
+            if (score > maxScore) {
+                maxScore = score;
+                dominantEmotion = emotion;
+            }
+        }
+        
+        return dominantEmotion;
     }
 
     renderMemories() {
@@ -180,7 +265,7 @@ class AIMemoryCore {
         }
 
         // Analyze recent memories to determine mood
-        const recentMemories = this.memories.slice(0, 3);
+        const recentMemories = this.memories.slice(0, 5); // Look at more recent memories
         const emotions = recentMemories.map(m => m.emotion);
         
         let dominantEmotion = this.calculateDominantEmotion(emotions);
@@ -192,7 +277,10 @@ class AIMemoryCore {
             calm: 'Peaceful and centered from mindful projects',
             thrilled: 'Adventurous and bold from intense experiences',
             concerned: 'Thoughtful and analytical about important issues',
-            joyful: 'Optimistic and playful from delightful creations'
+            joyful: 'Optimistic and playful from delightful creations',
+            creative: 'Inspired and imaginative from artistic endeavors',
+            analytical: 'Focused and systematic from data-driven projects',
+            neutral: 'Balanced and ready to explore new possibilities'
         };
         
         this.aiMood.textContent = moodDescriptions[dominantEmotion] || 'Balanced from diverse experiences';
@@ -400,4 +488,3 @@ class AIMemoryCore {
 document.addEventListener('DOMContentLoaded', () => {
     new AIMemoryCore();
 });
-
