@@ -452,6 +452,9 @@ body {
     font-size: 14px;
     color: rgba(255, 255, 255, 0.9);
     white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 60vh;
+    overflow-y: auto;
 }
 
 /* Animations */
